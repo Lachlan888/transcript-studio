@@ -17,9 +17,13 @@
   "build": {
     "appId": "com.lachlanheycox.transcriptstudio",
     "productName": "Transcript Studio",
+    "afterPack": "scripts/strip-macos-signatures.js",
     "mac": {
       "icon": "assets/icon.icns",
-      "target": "dmg"
+      "target": "dmg",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
     },
     "files": [
       "main.js",
