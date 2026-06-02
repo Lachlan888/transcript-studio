@@ -6,7 +6,7 @@
   "scripts": {
     "start": "env -u ELECTRON_RUN_AS_NODE electron .",
     "package": "electron-builder",
-    "dist": "electron-builder --mac dmg"
+    "dist": "electron-builder --mac dmg --publish never"
   },
   "author": "Lachlan Heycox",
   "license": "MIT",
