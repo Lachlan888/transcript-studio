@@ -1,0 +1,34 @@
+{
+  "name": "transcript-studio",
+  "version": "0.1.0",
+  "description": "A lightweight local desktop app for transcripts from audio files and YouTube links.",
+  "main": "main.js",
+  "scripts": {
+    "start": "env -u ELECTRON_RUN_AS_NODE electron .",
+    "package": "electron-builder",
+    "dist": "electron-builder --mac dmg"
+  },
+  "author": "Lachlan Heycox",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^34.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.lachlanheycox.transcriptstudio",
+    "productName": "Transcript Studio",
+    "mac": {
+      "icon": "assets/icon.icns",
+      "target": "dmg"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "renderer.js",
+      "styles.css",
+      "assets/**/*",
+      "package.json"
+    ]
+  }
+}

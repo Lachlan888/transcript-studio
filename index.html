@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Transcript Studio</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="app-header">
+        <div class="app-identity">
+          <img class="app-icon" src="assets/icon.png" alt="" aria-hidden="true" />
+          <div>
+            <h1>Transcript Studio</h1>
+
+          </div>
+        </div>
+        <div id="dependencyBadge" class="status-badge status-checking">Checking dependencies</div>
+      </header>
+
+      <section id="setupPanel" class="panel hidden" aria-live="polite">
+        <div class="panel-heading">
+          <div>
+            <h2>Setup</h2>
+            <p id="setupMessage">Checking required local tools.</p>
+          </div>
+        </div>
+
+        <div class="dependency-grid">
+          <div class="dependency-row">
+            <span>Python</span>
+            <strong id="pythonStatus">Checking</strong>
+          </div>
+          <div class="dependency-row">
+            <span>Homebrew</span>
+            <strong id="brewStatus">Checking</strong>
+          </div>
+          <div class="dependency-row">
+            <span>yt-dlp</span>
+            <strong id="ytdlpStatus">Checking</strong>
+          </div>
+          <div class="dependency-row">
+            <span>ffmpeg</span>
+            <strong id="ffmpegStatus">Checking</strong>
+          </div>
+          <div class="dependency-row">
+            <span>Whisper environment</span>
+            <strong id="whisperStatus">Checking</strong>
+          </div>
+        </div>
+
+        <div class="setup-actions">
+          <button id="installButton" class="primary-button">Install Missing Tools</button>
+          <button id="recheckButton">Re-check</button>
+          <button id="copyManualButton">Copy Manual Install Commands</button>
+          <button id="copyLogButton">Copy Log</button>
+          <button id="continueButton" disabled>Continue Anyway</button>
+        </div>
+
+        <pre id="setupLog" class="log-panel setup-log"></pre>
+      </section>
+
+      <section id="mainPanel" class="workspace hidden">
+        <section class="panel queue-panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Job Queue</h2>
+              <p>Add files or YouTube links, then run them one at a time.</p>
+            </div>
+          </div>
+
+          <div class="queue-add-layout">
+            <div class="file-picker">
+              <button id="addFilesToQueueButton">Add Files to Queue</button>
+              <p class="helper-text">Choose one or more local audio/video files and add them directly to the queue.</p>
+            </div>
+
+            <div class="youtube-queue-input">
+              <label class="field">
+                <span>YouTube URL</span>
+                <input id="youtubeUrlInput" type="url" placeholder="https://www.youtube.com/watch?v=..." />
+              </label>
+              <button id="addYoutubeToQueueButton">Add YouTube URL to Queue</button>
+            </div>
+          </div>
+
+          <div class="queue-actions">
+            <button id="startQueueButton" class="primary-button">Start Queue</button>
+            <button id="stopCurrentJobButton" disabled>Stop Current Job</button>
+            <button id="clearCompletedButton">Clear Completed Jobs</button>
+          </div>
+
+          <div class="queue-table-wrap">
+            <table class="queue-table">
+              <thead>
+                <tr>
+                  <th>Source</th>
+                  <th>Type</th>
+                  <th>Model</th>
+                  <th>Planned</th>
+                  <th>Used</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="queueList">
+                <tr>
+                  <td colspan="7" class="queue-empty">No jobs in the queue. Add an audio file or YouTube link to begin.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Output Folder</h2>
+              <p>Transcript job folders will be saved inside this folder.</p>
+            </div>
+          </div>
+
+          <div class="output-folder-layout">
+            <div id="outputBasePath" class="path-display">Loading output folder...</div>
+            <div class="output-folder-actions">
+              <button id="chooseOutputFolderButton">Choose Output Folder</button>
+              <button id="resetOutputFolderButton">Reset to Default</button>
+              <button id="openOutputBaseButton">Open Output Folder</button>
+            </div>
+            <label class="check-row">
+              <input id="cleanupIntermediateCheckbox" type="checkbox" checked />
+              <span>Delete downloaded audio/video after successful transcription</span>
+            </label>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Transcription Options</h2>
+            </div>
+          </div>
+
+          <div class="options-grid">
+            <label class="field">
+              <span>Model</span>
+              <select id="modelSelect">
+                <option value="tiny">tiny - fastest, roughest</option>
+                <option value="base">base - fast, basic accuracy</option>
+                <option value="small" selected>small - recommended default</option>
+                <option value="medium">medium - slower, more accurate</option>
+                <option value="large">large - slowest, most accurate</option>
+              </select>
+              <small class="helper-text">Larger models are usually more accurate but take longer. Small is the best default for most interviews. Medium is useful for songs, noisy recordings or important transcripts.</small>
+            </label>
+
+            <label class="field">
+              <span>Language</span>
+              <select id="languageSelect">
+                <option value="English" selected>English</option>
+              </select>
+            </label>
+
+            <label class="check-row">
+              <input id="tryCaptionsCheckbox" type="checkbox" checked />
+              <span>Try YouTube captions first</span>
+            </label>
+
+            <label class="check-row">
+              <input id="fallbackCheckbox" type="checkbox" checked />
+              <span>Use Whisper if captions are unavailable</span>
+            </label>
+
+            <label class="check-row">
+              <input id="forceWhisperCheckbox" type="checkbox" />
+              <span>Force Whisper transcription</span>
+            </label>
+          </div>
+        </section>
+
+        <section class="panel actions-panel">
+          <div class="action-row">
+            <button id="openOutputButton">Open Output Folder</button>
+            <button id="clearButton">Clear</button>
+            <small class="helper-text action-note">First use of a model may take extra time while Whisper downloads it.</small>
+          </div>
+          <div class="stage-line">
+            <span>Current stage</span>
+            <strong id="stageLabel">Ready</strong>
+          </div>
+        </section>
+
+        <section id="progressCard" class="panel progress-card">
+          <div class="panel-heading compact-heading">
+            <h2>Progress</h2>
+          </div>
+          <div class="current-job-line">
+            <span>Current job</span>
+            <strong id="currentJobName">None</strong>
+          </div>
+          <div class="progress-stage-row">
+            <strong id="progressStage">Ready</strong>
+            <span id="progressPercent"></span>
+          </div>
+          <div id="progressBar" class="progress-bar indeterminate" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Transcript progress">
+            <div id="progressFill" class="progress-fill"></div>
+          </div>
+          <p id="progressMessage" class="progress-message">Add files or a YouTube link to the queue, then start the queue.</p>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading compact-heading">
+            <h2>Technical Log</h2>
+          </div>
+          <pre id="jobLog" class="log-panel"></pre>
+        </section>
+
+        <section class="panel transcript-panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Transcript</h2>
+            </div>
+            <div class="transcript-actions">
+              <button id="previousJobButton">Previous Transcript</button>
+              <button id="nextJobButton">Next Transcript</button>
+              <button id="copyTranscriptButton">Copy Transcript</button>
+              <button id="saveTxtButton">Save TXT</button>
+              <button id="saveVttButton" disabled>Save VTT</button>
+              <button id="saveSrtButton" disabled>Save SRT</button>
+              <button id="removeTranscriptFromViewButton" disabled>Remove Transcript from View</button>
+              <button id="clearTranscriptViewerButton" disabled>Clear Transcript Viewer</button>
+              <button id="cleanDownloadedFilesButton" disabled>Clean Downloaded Files</button>
+              <button id="openOutputButtonBottom">Open Output Folder</button>
+            </div>
+          </div>
+          <div id="selectedJobDetails" class="selected-job-details">
+            <div>
+              <span>Selected job</span>
+              <strong id="selectedJobName">Single transcript</strong>
+            </div>
+            <div>
+              <span>Status</span>
+              <strong id="selectedJobStatus">Ready</strong>
+            </div>
+            <div>
+              <span>Source type</span>
+              <strong id="selectedJobSourceType">Single job</strong>
+            </div>
+            <div>
+              <span>Model</span>
+              <strong id="selectedJobModel">small</strong>
+            </div>
+            <div>
+              <span>Planned</span>
+              <strong id="selectedJobPlannedMethod">Not run</strong>
+            </div>
+            <div>
+              <span>Used</span>
+              <strong id="selectedJobUsedMethod">Not run</strong>
+            </div>
+            <div>
+              <span>Finished</span>
+              <strong id="selectedJobFinishedAt">Not finished</strong>
+            </div>
+            <div class="selected-job-output">
+              <span>Output folder</span>
+              <strong id="selectedJobOutputDir">Not available</strong>
+            </div>
+          </div>
+          <textarea id="transcriptTextarea" spellcheck="true" placeholder="Transcript text will appear here."></textarea>
+        </section>
+      </section>
+    </main>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>
