@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  build-mac:
+  build-macos:
     name: Build macOS DMG
     runs-on: macos-latest
     env:
@@ -22,24 +22,39 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "20"
+          cache: "npm"
 
       - name: Install dependencies
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+        run: npm ci
+
+      - name: Validate source files
+        run: npm run check
 
       - name: Build macOS DMG
         run: npm run dist
 
-      - name: Upload DMG to GitHub Release
+      - name: Verify DMG exists
+        run: |
+          set -e
+          ls -lah dist
+          test -n "$(find dist -maxdepth 1 -name '*.dmg' -print -quit)"
+
+      - name: Write release information
+        run: node scripts/write-release-info.js
+
+      - name: Show release information
+        run: |
+          cat dist/release-info.json
+          echo ""
+          cat dist/release-notes.md
+
+      - name: Upload DMG and publish release notes
         uses: softprops/action-gh-release@v2
         with:
+          body_path: dist/release-notes.md
           files: |
             dist/*.dmg
-            dist/*.zip
+            dist/release-info.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

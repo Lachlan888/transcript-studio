@@ -809,7 +809,7 @@ async function tryYouTubeCaptions(event, options) {
     trackAsJob: true
   });
 
-  const vttPath = await findNewestFile(jobDir, '.vtt');
+  const vttPath = await findBestCaptionFile(jobDir);
   if (!vttPath) {
     sendLog(event, '\nNo usable captions found.\n');
     if (!useWhisperFallback) {
@@ -817,6 +817,7 @@ async function tryYouTubeCaptions(event, options) {
     }
     return null;
   }
+  sendLog(event, `Using caption file: ${path.basename(vttPath)}\n`);
 
   sendStatus(event, 'Cleaning captions');
   sendProgress(event, {
@@ -825,7 +826,10 @@ async function tryYouTubeCaptions(event, options) {
     message: 'Cleaning YouTube captions.'
   });
   const rawVtt = await fsp.readFile(vttPath, 'utf8');
-  const transcript = cleanVtt(rawVtt);
+  const { text: transcript, removedAdjacentDuplicates } = cleanVtt(rawVtt);
+  sendLog(event, removedAdjacentDuplicates > 0
+    ? `Cleaned YouTube captions: removed ${removedAdjacentDuplicates} adjacent duplicate caption line(s).\n`
+    : 'Cleaned YouTube captions: removed adjacent duplicate caption lines.\n');
   if (!transcript.trim()) {
     sendLog(event, '\nNo usable captions found.\n');
     if (!useWhisperFallback) throw friendlyError('The downloaded captions were empty.');
@@ -1009,6 +1013,44 @@ async function findNewestFile(dir, extension, excludeNames = []) {
   return files[0] ? files[0].filePath : null;
 }
 
+async function findBestCaptionFile(dir) {
+  const entries = await fsp.readdir(dir, { withFileTypes: true });
+  const candidates = [];
+
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    if (path.extname(entry.name).toLowerCase() !== '.vtt') continue;
+    if (entry.name === 'transcript.vtt') continue;
+    if (/live_chat/i.test(entry.name)) continue;
+
+    const filePath = path.join(dir, entry.name);
+    const stat = await fsp.stat(filePath);
+    candidates.push({
+      filePath,
+      name: entry.name,
+      score: captionLanguageScore(entry.name),
+      mtimeMs: stat.mtimeMs
+    });
+  }
+
+  candidates.sort((a, b) => {
+    if (a.score !== b.score) return b.score - a.score;
+    return b.mtimeMs - a.mtimeMs;
+  });
+
+  return candidates[0] ? candidates[0].filePath : null;
+}
+
+function captionLanguageScore(filename) {
+  const lower = filename.toLowerCase();
+  if (/(^|[.])en[.]vtt$/.test(lower)) return 100;
+  if (/(^|[.])en-us[.]vtt$/.test(lower)) return 90;
+  if (/(^|[.])en-gb[.]vtt$/.test(lower)) return 85;
+  if (/(^|[.])en[-_a-z0-9]*[.]vtt$/.test(lower)) return 70;
+  if (/english/.test(lower)) return 60;
+  return 10;
+}
+
 async function findIntermediateMediaFiles(outputDir) {
   if (!outputDir) return [];
   let resolvedOutputDir;
@@ -1097,7 +1139,6 @@ async function finishSuccessfulJob(event, outputDir, metadata) {
 }
 
 function cleanVtt(content) {
-  const seen = new Set();
   const lines = content
     .replace(/\r/g, '')
     .split('\n')
@@ -1111,7 +1152,7 @@ function cleanVtt(content) {
       if (/^(align|position|line|size):/i.test(line)) return false;
       return true;
     })
-    .map((line) => line.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim());
+    .map((line) => decodeHtmlEntities(line.replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim());
 
   const cleaned = [];
   for (const line of lines) {
@@ -1119,13 +1160,113 @@ function cleanVtt(content) {
       if (cleaned[cleaned.length - 1] !== '') cleaned.push('');
       continue;
     }
-    const key = line.toLowerCase();
-    if (seen.has(key) && cleaned[cleaned.length - 1] === line) continue;
-    seen.add(key);
     cleaned.push(line);
   }
 
-  return cleaned.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
+  const deduped = dedupeAdjacentCaptionLines(cleaned.join('\n'));
+  return {
+    text: reflowCaptionText(deduped.text),
+    removedAdjacentDuplicates: deduped.removedAdjacentDuplicates
+  };
+}
+
+function dedupeAdjacentCaptionLines(text) {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim());
+
+  const output = [];
+  let previousNonEmpty = null;
+  let blankPending = false;
+  let removedAdjacentDuplicates = 0;
+
+  for (const line of lines) {
+    if (!line) {
+      blankPending = output.length > 0;
+      continue;
+    }
+
+    if (line === previousNonEmpty) {
+      removedAdjacentDuplicates += 1;
+      continue;
+    }
+
+    if (blankPending && output.length > 0) {
+      output.push('');
+    }
+
+    output.push(line);
+    previousNonEmpty = line;
+    blankPending = false;
+  }
+
+  const cleaned = output.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return {
+    text: cleaned ? `${cleaned}\n` : '',
+    removedAdjacentDuplicates
+  };
+}
+
+function reflowCaptionText(text) {
+  const blocks = text
+    .split(/\n{2,}/)
+    .map((block) => block
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean))
+    .filter((block) => block.length > 0);
+
+  const paragraphs = [];
+  let current = [];
+
+  for (const block of blocks) {
+    for (const line of block) {
+      const startsNewSpeaker = /^>{1,2}\s*/.test(line);
+      if (startsNewSpeaker && current.length > 0) {
+        paragraphs.push(current.join(' '));
+        current = [line];
+        continue;
+      }
+      current.push(line);
+    }
+
+    if (current.length > 0) {
+      paragraphs.push(current.join(' '));
+      current = [];
+    }
+  }
+
+  const reflowed = paragraphs
+    .map((paragraph) => paragraph.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .join('\n\n')
+    .trim();
+
+  return reflowed ? `${reflowed}\n` : '';
+}
+
+function decodeHtmlEntities(text) {
+  const namedEntities = {
+    amp: '&',
+    lt: '<',
+    gt: '>',
+    quot: '"',
+    apos: "'",
+    nbsp: ' '
+  };
+
+  return text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, entity) => {
+    const normalized = entity.toLowerCase();
+    if (normalized.startsWith('#x')) {
+      const codePoint = Number.parseInt(normalized.slice(2), 16);
+      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : match;
+    }
+    if (normalized.startsWith('#')) {
+      const codePoint = Number.parseInt(normalized.slice(1), 10);
+      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : match;
+    }
+    return Object.prototype.hasOwnProperty.call(namedEntities, normalized) ? namedEntities[normalized] : match;
+  });
 }
 
 async function writeMetadata(outputDir, data) {

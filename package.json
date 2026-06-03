@@ -6,6 +6,8 @@
   "scripts": {
     "start": "env -u ELECTRON_RUN_AS_NODE electron .",
     "package": "electron-builder",
+    "check:syntax": "node --check main.js && node --check preload.js && node --check renderer.js",
+    "check": "npm run check:syntax",
     "dist": "electron-builder --mac dmg --publish never"
   },
   "author": "Lachlan Heycox",
